@@ -1,0 +1,27 @@
+#!/bin/sh
+
+. /etc/init.d/functions
+
+checkused(){
+	SCRIPT=$1
+	DEVNAME=`basename $2`
+	DEVPATH=/dev/$DEVNAME
+	SYSPATH=/sys/block/$DEVNAME
+
+	if [ -b "$DEVPATH" ] && [ -d "$SYSPATH" ]; then
+		for SUBNAME in $SYSPATH/$DEVNAME"?"
+		do
+			if [ -d "$SUBNAME" ]; then
+				HOLDERS=$SUBNAME/holders
+				if [ "`ls -A $HOLDERS`" -ne "" ]; then
+					setlog "$SCRIPT" "$DEVNAME has been used by other" 1
+					return 1
+				fi
+			fi
+		done
+		return 0
+	else
+		setlog "$SCRIPT" "$DEVNAME is not block device" 1
+		return 1
+	fi
+}

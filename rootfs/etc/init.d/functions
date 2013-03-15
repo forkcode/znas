@@ -1,0 +1,126 @@
+#!/bin/sh
+
+setlog(){
+        if [ ! -d /var/log ]; then
+                mkdir /var/log
+        fi
+
+        DATE=`date "+%Y-%m-%d %T"`
+	TITLE=$1
+        MESSAGE=$2
+        LEVEL=$3
+
+        echo $DATE"|"$TITLE"|"$MESSAGE"|"$LEVEL >> /var/log/scripts.log
+}
+
+# $1 process name
+# $2 execute file full path
+# $3 execute args
+
+runprocess(){
+	name=$1
+	shift
+	sbin=$1
+	shift
+	args=$@
+
+	PID=`pgrep -f $sbin`
+        if [ "null$PID" == "null" ]; then
+                $sbin $args
+
+                setlog "$name" "start $name" "0"
+	else
+		echo "$name already run as pid $PID"
+        fi
+}
+
+stoprocess(){
+	name=$1
+        shift
+        sbin=$1
+        shift
+        args=$@
+
+	PID=`pgrep $sbin`
+        if [ "null$PID" == "null" ]; then
+		echo $name is not running
+	else
+                kill $PID > /dev/null 
+                for count in 1 2 3 4 5
+                do
+                        sleep 1
+
+                        pgrep $sbin > /dev/null
+                        if [ $? -eq 1 ]; then
+                                setlog "$name" "stop $name success" "0"
+				return 0
+                        fi
+                done
+                setlog "$name" "stop $name failed" "1"
+        fi
+
+	return 1
+}
+
+lockscript(){
+	lockpath=/var/lock/
+	
+	if [ ! -d $lockpath ]; then
+		mkdir -p $lockpath
+	fi
+
+	if [ -e $lockpath/$1.pid ]; then
+		read pid > /dev/null 2>&1 < $lockpath/$1.pid
+		if [ -n $pid ]; then
+			if [ -e /proc/$pid ]; then
+				echo "$pid lock scripts,now exit"
+				exit 1
+			fi
+		fi
+	fi
+
+#	echo "process $$ lock scripts now"
+	echo $$ > $lockpath/$1.pid
+}
+
+freescript(){
+	if [ ! -d $lockpath ]; then
+		return 1
+	fi
+
+	if [ -e $lockpath/$1.pid ]; then
+		read pid > /dev/null 2>&1 < $lockpath/$1.pid
+		if [ -n $pid ]; then
+			if [ $pid == $$ ]; then
+#				echo "process $pid free scripts now"
+				rm $lockpath/$1.pid
+				return 0
+			fi
+		fi
+	fi
+
+	return 1
+}
+
+makenode(){
+	if [ ! -d /dev ]; then
+		setlog makenode "directory /etc not exists" 1
+		return 1
+	fi
+
+	mknod /dev/console c 5 1
+	mknod /dev/full    c 1 7
+	mknod /dev/kmem    c 1 2
+	mknod /dev/mem     c 1 1
+	mknod /dev/null    c 1 3
+	mknod /dev/port    c 1 4
+	mknod /dev/random  c 1 8
+	mknod /dev/urandom c 1 9
+	mknod /dev/zero    c 1 5
+	ln -s /proc/kcore /dev/core
+
+	mknod /dev/tty c 5 0
+	for i in `seq 0 6`; do
+        	mknod /dev/tty$i c 4 $i
+	done
+}

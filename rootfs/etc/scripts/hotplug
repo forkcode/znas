@@ -1,0 +1,3 @@
+#!/bin/sh
+
+echo "$MDEV|$ACTION" >> /var/log/mdops.log
