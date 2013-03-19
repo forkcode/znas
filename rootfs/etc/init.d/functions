@@ -73,7 +73,7 @@ lockscript(){
 		read pid > /dev/null 2>&1 < $lockpath/$1.pid
 		if [ -n $pid ]; then
 			if [ -e /proc/$pid ]; then
-				echo "$pid lock scripts,now exit"
+				echo "$pid locked scripts,now exit"
 				exit 1
 			fi
 		fi
