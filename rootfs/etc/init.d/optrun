@@ -18,6 +18,11 @@ if [ -b $USERRAID ]; then
 		exit 0
 	else
 		if [ -d /opt/etc/init.d ]; then
+			for nasscript in /opt/etc/nasapp.d/S??*
+			do
+				$nasscript >> /var/log/optinit.log 2>&1
+			done
+
 			for optscript in /opt/etc/init.d/S??*
 			do
 				$optscript >> /var/log/optinit.log 2>&1

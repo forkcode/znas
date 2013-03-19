@@ -1,7 +1,0 @@
-# usb auto mount
-
-ACTION=="add", KERNEL=="sd[a-z][0-9]", DRIVERS=="usb", \
-	RUN+="/etc/scripts/usbauto add %k '%s{manufacturer}-%s{product}'"
-
-ACTION=="remove", KERNEL=="sd[a-z][0-9]", DRIVERS=="usb", \
-	RUN+="/etc/scripts/usbauto del %k '%s{manufacturer}-%s{product}'"

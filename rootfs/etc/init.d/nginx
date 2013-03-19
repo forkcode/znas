@@ -3,23 +3,29 @@
 . /etc/init.d/functions
 
 keypath=/etc
-confile=/etc/nginx/nginx.conf
+confile=nginx/nginx.conf
 service=nginx
-execute="/sbin/nginx -p /var/ -c $confile"
+execute="/sbin/nginx -p /var/ -c"
 
 service_prepare(){
 	[ ! -d /var/logs ] && mkdir -p /var/logs/
+
+	if [ -d /opt/$confile ]; then
+		confile=/opt/$confile
+	else
+		confile=/etc/$confile
+	fi
 }
 
 service_start(){
         [ ! -d /var/empty ] && mkdir -p /var/empty
 
         service_prepare
-        runprocess $service $execute
+        runprocess $service "$execute $confile"
 }
 
 service_stop(){
-        stoprocess $service $execute
+        stoprocess $service "$execute $confile"
 }
 
 case $1 in
