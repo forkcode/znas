@@ -93,9 +93,9 @@ makeuser(){
 	touch /var/run/etc/shadow
 
 	# create admin
-	echo -e "admin\nadmin" | adduser -u 0 -s /bin/sh admin
+#	echo -e "admin\nadmin" | adduser -u 0 -s /bin/sh admin
 	# create guest
-	adduser -u 512 -s /bin/false guest -D
+#	adduser -u 512 -s /bin/false guest -D
 }
 
 makenode(){
