@@ -2,8 +2,8 @@
 # udhcpc script edited by Tim Riker <Tim@Rikers.org>
 
 RESOLV_CONF="/var/run/dhcpc/resolv.conf"
-DATE_SEC=`date +%s`
-RAND_IP=169.254.254.$(($DATE_SEC%255+1))
+RAND_DD=`echo -n $RANDOM`
+RAND_IP=169.254.254.$(($RAND_DD%255+1))
 
 [ -n "$1" ] || { echo "Error: should be called from udhcpc"; exit 1; }
 
