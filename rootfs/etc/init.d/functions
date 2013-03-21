@@ -13,53 +13,27 @@ setlog(){
         echo $DATE"|"$TITLE"|"$MESSAGE"|"$LEVEL >> /var/log/scripts.log
 }
 
-# $1 process name
-# $2 execute file full path
-# $3 execute args
-
 runprocess(){
-	name=$1
-	shift
-	sbin=$1
-	shift
-	args=$@
+	local DAEMON_NAME=$1
+	local DAEMON_EXEC=$2
+	local DAEMON_OPTS=$3
+	[ ! -d /var/process ] && mkdir -p /var/process
+	start-stop-daemon --start --quiet\
+		--make-pidfile --pidfile /var/process/$DAEMON_NAME.pid \
+		--exec $DAEMON_EXEC -- $DAEMON_OPTS
 
-	PID=`pgrep -f $sbin`
-        if [ "null$PID" == "null" ]; then
-                $sbin $args
-
-                setlog "$name" "start $name" "0"
-	else
-		echo "$name already run as pid $PID"
-        fi
+	[ $! -ne 0 ] && setlog $DAEMON_NAME "run $DAEMON_NAME failed" 1
 }
 
 stoprocess(){
-	name=$1
-        shift
-        sbin=$1
-        shift
-        args=$@
+	local DAEMON_NAME=$1
+        local DAEMON_EXEC=$2
+	local DAEMON_OPTS=$3
+        [ ! -d /var/process ] && mkdir -p /var/process
+        start-stop-daemon --stop --quiet\
+                --exec $DAEMON_EXEC -- $DAEMON_OPTS
 
-	PID=`pgrep $sbin`
-        if [ "null$PID" == "null" ]; then
-		echo $name is not running
-	else
-                kill $PID > /dev/null 
-                for count in 1 2 3 4 5
-                do
-                        sleep 1
-
-                        pgrep $sbin > /dev/null
-                        if [ $? -eq 1 ]; then
-                                setlog "$name" "stop $name success" "0"
-				return 0
-                        fi
-                done
-                setlog "$name" "stop $name failed" "1"
-        fi
-
-	return 1
+	[ $! -ne 0 ] && setlog $DAEMON_NAME "stop $DAEMON_NAME failed" 1
 }
 
 lockscript(){
@@ -73,7 +47,7 @@ lockscript(){
 		read pid > /dev/null 2>&1 < $lockpath/$1.pid
 		if [ -n $pid ]; then
 			if [ -e /proc/$pid ]; then
-				echo "$pid locked scripts,now exit"
+				echo "$pid lock scripts,now exit"
 				exit 1
 			fi
 		fi

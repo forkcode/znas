@@ -12,17 +12,19 @@ if [ -b $USERRAID ]; then
 	[ ! -f /opt ] && mkdir -p /opt
 
 	echo "mount $USERRAID"
-	mount -t ext2 $USERRAID /opt
+	mount -t ext4 $USERRAID /opt
 	if [ $? -ne 0 ]; then
 		setlog $BASENAME "mount userspace failed..." 1
 		exit 0
 	else
-		if [ -d /opt/etc/init.d ]; then
-			for nasscript in /opt/etc/nasapp.d/S??*
+		if [ -d /opt/etc/nasapp.d ]; then
+			for optscript in /opt/etc/nasapp.d/S??*
 			do
-				$nasscript >> /var/log/optinit.log 2>&1
+				$optscript >> /var/log/optinit.log 2>&1
 			done
+		fi
 
+		if [ -d /opt/etc/init.d ]; then
 			for optscript in /opt/etc/init.d/S??*
 			do
 				$optscript >> /var/log/optinit.log 2>&1

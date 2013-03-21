@@ -4,7 +4,8 @@
 
 confile=/etc/udev/udev.conf
 service=udevd
-execute="/sbin/udevd -d"
+execute="/sbin/udevd"
+exeopts="-d"
 
 service_prepare(){
 	if [ ! -d /run ]; then
@@ -21,7 +22,7 @@ service_start(){
         [ ! -d /var/run ] && mkdir -p /var/run
 
         service_prepare
-        runprocess $service $execute
+	runprocess "$service" "$execute" "$exeopts"
 
 	udevadm_path="/sbin/udevadm"
 
@@ -33,7 +34,7 @@ service_start(){
 }
 
 service_stop(){
-        stoprocess $service $execute
+	stoprocess "$service" "$execute" "$exeopts"
 }
 
 service_restart(){

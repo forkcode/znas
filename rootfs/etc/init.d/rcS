@@ -11,6 +11,11 @@ if [ $? -ne 0 ]; then
 	mkdir /dev/shm
 fi
 
+[ ! -d /proc ] && mkdir -p /proc
+[ ! -d /sys  ] && mkdir -p /sys
+[ ! -d /var  ] && mkdir -p /var
+[ ! -d /tmp  ] && mkdir -p /tmp
+
 #build proc sys var tmp ...
 mount -a
 

@@ -5,6 +5,7 @@
 confile=/etc/syslog.conf
 service=syslog
 execute="/sbin/syslogd"
+exeopts=""
 
 service_prepare(){
 	[ ! -d /var/run ] && mkdir /var/run
@@ -13,11 +14,11 @@ service_prepare(){
 
 service_start(){
         service_prepare
-	runprocess $service $execute
+	runprocess "$service" "$execute" "$exeopts"
 }
 
 service_stop(){
-	stoprocess $service $execute
+	stoprocess "$service" "$execute" "$exeopts"
 }
 
 service_restart(){

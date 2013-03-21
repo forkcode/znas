@@ -4,7 +4,8 @@
 
 confile=/etc/syslog.conf
 service=crond
-execute="/sbin/crond -S"
+execute="/sbin/crond"
+exeopts="-S"
 
 service_prepare(){
 	[ ! -d /var/spool/cron/crontabs ] && mkdir -p /var/spool/cron/crontabs
@@ -12,11 +13,11 @@ service_prepare(){
 
 service_start(){
         service_prepare
-	runprocess $service $execute
+	runprocess $service $execute $exeopts
 }
 
 service_stop(){
-	stoprocess $service $execute
+	stoprocess $service $execute $exeopts
 }
 
 service_restart(){

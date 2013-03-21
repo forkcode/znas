@@ -5,7 +5,8 @@
 keypath=/etc/sshd
 confile=/etc/sshd/sshd_config
 service=sshd
-execute="/sbin/sshd -f $confile"
+execute="/sbin/sshd"
+exeopts="-f $confile"
 
 service_prepare(){
         if [ ! -d $keypath ]; then
@@ -34,11 +35,11 @@ service_start(){
         [ ! -d /var/empty ] && mkdir -p /var/empty
 
         service_prepare
-        runprocess $service $execute
+        runprocess "$service" "$execute" "$exeopts"
 }
 
 service_stop(){
-        stoprocess $service $execute
+        stoprocess "$service" "$execute" "$exeopts"
 }
 
 case $1 in
