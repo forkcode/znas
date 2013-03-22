@@ -11,6 +11,9 @@ mdadm -As >> /var/log/mdinit.log
 if [ -b $USERRAID ]; then
 	[ ! -f /opt ] && mkdir -p /opt
 
+	echo "check $USERRAID"
+	e2fsck -p $USERRAID
+
 	echo "mount $USERRAID"
 	mount -t ext4 $USERRAID /opt
 	if [ $? -ne 0 ]; then
@@ -39,6 +42,9 @@ fi
 for storspace in $STORRAID[0-16]
 do
 	if [ -b $storspace ]; then
+		echo "check $storspace"
+	        e2fsck -p $storspace
+
 		echo "mount $storspace"
 		local mountpath=/mnt/`basename $storspace`
 		mkdir -p $mountpath
