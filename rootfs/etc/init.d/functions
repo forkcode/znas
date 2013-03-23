@@ -14,26 +14,35 @@ setlog(){
 }
 
 runprocess(){
-	local DAEMON_NAME=$1
-	local DAEMON_EXEC=$2
-	local DAEMON_OPTS=$3
-	[ ! -d /var/process ] && mkdir -p /var/process
-	start-stop-daemon --start --quiet\
-		--make-pidfile --pidfile /var/process/$DAEMON_NAME.pid \
-		--exec $DAEMON_EXEC -- $DAEMON_OPTS
+	DAEMON_NAME=$1
+	DAEMON_EXEC=$2
+	shift 2
+	DAEMON_OPTS=$@
 
-	[ $! -ne 0 ] && setlog $DAEMON_NAME "run $DAEMON_NAME failed" 1
+	[ ! -d /var/process ] && mkdir -p /var/process
+	if start-stop-daemon --start \
+		--make-pidfile --pidfile /var/process/$DAEMON_NAME.pid \
+		--exec $DAEMON_EXEC -- $DAEMON_OPTS; then
+
+		setlog $DAEMON_NAME "run $DAEMON_NAME success" 0
+	else
+		setlog $DAEMON_NAME "run $DAEMON_NAME failed"  1
+	fi
 }
 
 stoprocess(){
-	local DAEMON_NAME=$1
-        local DAEMON_EXEC=$2
-	local DAEMON_OPTS=$3
+	DAEMON_NAME=$1
+        DAEMON_EXEC=$2
+	shift 2
+	DAEMON_OPTS=$@
         [ ! -d /var/process ] && mkdir -p /var/process
-        start-stop-daemon --stop --quiet\
-                --exec $DAEMON_EXEC -- $DAEMON_OPTS
+        if start-stop-daemon --stop --quiet\
+                --exec $DAEMON_EXEC -- $DAEMON_OPTS; then
 
-	[ $! -ne 0 ] && setlog $DAEMON_NAME "stop $DAEMON_NAME failed" 1
+		setlog $DAEMON_NAME "stop $DAEMON_NAME success" 0
+	else
+		setlog $DAEMON_NAME "stop $DAEMON_NAME failed"  1
+	fi
 }
 
 lockscript(){

@@ -1,0 +1,51 @@
+#!/bin/sh
+
+. /etc/init.d/functions
+
+service="samba"
+basedir="/mnt/share"
+
+service_prepare(){
+	[ ! -d $basedir ] && mkdir -p $basedir
+}
+
+service_start(){
+        [ ! -d /var/empty ] && mkdir -p /var/empty
+
+        service_prepare
+        runprocess $service "smbd" "-D"
+	runprocess $service "nmbd" "-D"
+	runprocess $service "winbindd" "-D"
+}
+
+service_stop(){
+	stoprocess $service "smbd" "-D"
+        stoprocess $service "nmbd" "-D"
+        stoprocess $service "winbindd" "-D"
+}
+
+service_restart(){
+	kill -HUP `pidof smbd`
+	kill -HUP `pidof nmbd`
+	kill -HUP `pidof winbindd`
+#	service_stop
+#	service_start
+}
+
+case $1 in
+        start)
+                service_start
+                exit 0 ;;
+        stop)
+                service_stop
+                exit 0 ;;
+        restart)
+                service_restart
+                exit 0 ;;
+        status)
+                service_status
+                exit 0 ;;
+        *)
+                echo "Usage: `basename $0` {start|stop|restart|status}"
+                exit 1 ;;
+esac

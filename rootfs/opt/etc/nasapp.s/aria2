@@ -1,0 +1,64 @@
+#!/bin/sh
+
+. /etc/init.d/functions
+
+service="aria2"
+basedir="/mnt/share"
+storage="$basedir/download"
+execute="aria2c"
+exeopts="--enable-rpc --rpc-listen-all=true --rpc-allow-origin-all --dir=$storage --file-allocation=none -s 5 -j 3 -x 5 --continue=true -D"
+
+service_prepare(){
+	[ ! -d $basedir ] && mkdir -p $basedir
+
+	if [ ! -d $storage ]; then
+		setlog $service "download path:$storage not exists..." 1
+		for storpath in /mnt/storspace*
+		do
+			if [ -d $storpath/download ]; then
+				rm $storage > /dev/null 2>&1
+				ln -s $storpath/download $storage
+				break
+			fi
+		done
+	fi
+
+	if [ ! -d $storage ]; then
+		setlog $service "download path:$storage create failed..." 1
+		exit 1 
+	fi
+}
+
+service_start(){
+        [ ! -d /var/empty ] && mkdir -p /var/empty
+
+        service_prepare
+        runprocess $service $execute $exeopts
+}
+
+service_stop(){
+        stoprocess $service $execute $exeopts
+}
+
+service_restart(){
+	service_stop
+	service_start
+}
+
+case $1 in
+        start)
+                service_start
+                exit 0 ;;
+        stop)
+                service_stop
+                exit 0 ;;
+        restart)
+                service_restart
+                exit 0 ;;
+        status)
+                service_status
+                exit 0 ;;
+        *)
+                echo "Usage: `basename $0` {start|stop|restart|status}"
+                exit 1 ;;
+esac
