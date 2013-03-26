@@ -1,0 +1,23 @@
+#!/bin/sh
+
+# optimize vm mamage
+
+echo 1   > /proc/sys/vm/dirty_ratio
+echo 1   > /proc/sys/vm/dirty_background_ratio
+echo 100 > /proc/sys/vm/dirty_writeback_centisecs
+echo 100 > /proc/sys/vm/dirty_expire_centisecs
+echo 130 > /proc/sys/vm/vfs_cache_pressure
+echo 512 > /proc/sys/vm/min_free_kbytes
+
+# optimize net work
+
+
+
+# optimize disk
+
+for path in /sys/block/sd*
+do
+	if [ -d $path ]; then
+		echo 4096 > $path/queue/read_ahead_kb
+	fi
+done
