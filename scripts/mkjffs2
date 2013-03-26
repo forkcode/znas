@@ -1,2 +1,2 @@
 #!/bin/sh
-mkfs.jffs2 -r znas -o rootfs.jffs2 -p 0x17b00000 -e 128KiB -l -n
+mkfs.jffs2 -r rootfs -o rootfs.jffs2 -p 0x17b00000 -e 128KiB -l -n

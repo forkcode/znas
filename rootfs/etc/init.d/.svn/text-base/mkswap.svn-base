@@ -1,0 +1,24 @@
+#!/bin/sh
+
+. /etc/init.d/functions
+
+local SWAPPATH=/opt/swap/swapcache
+
+mount | grep /opt > /dev/null 2>&1
+
+if [ $? -eq 0 ]; then
+	if [ ! -f $SWAPPATH ]; then
+		mkdir -p $SWAPPATH > /dev/null 2>&1
+		dd if=/dev/zero of=$SWAPPATH bs=1M count=1024
+	fi
+
+	mkswap $SWAPPATH
+	
+	if [ $? -eq 0 ]; then
+		swapon $SWAPPATH
+	else
+		setlog "`basename $0`" "mkswap $SWAPPATH failed" 1
+	fi
+else
+	setlog "`basename $0`" "opt space not mount" 1
+fi 

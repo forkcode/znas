@@ -1,0 +1,9 @@
+#!/bin/sh
+
+echo -n "set enviorment with /etc/profile"
+
+export LD_LIBRARY_PATH=/lib:/opt/lib:/opt/usr/lib/
+export PATH=/bin:/sbin:/opt/bin:/opt/sbin:
+export TZ="GMT-8"
+export HOSTNAME=`hostname`
+export PS1="(znas)#"

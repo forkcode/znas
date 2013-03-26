@@ -1,0 +1,55 @@
+#!/bin/sh
+
+dhcpscript=/etc/udhcp/udhcps
+dhcpclient=/sbin/udhcpc
+keypath=/etc
+confile=/etc/nginx/nginx.conf
+service=network
+
+dhcpip(){
+	for dev in $@
+	do
+		$dhcpclient -i $dev -S -s $dhcpscript -b > /dev/null &
+	done
+}
+
+service_prepare(){
+	[ ! -d /var/run ] && mkdir /var/run
+
+	ifconfig lo 127.0.0.1
+}
+
+service_start(){
+
+	killall udhcpc > /dev/null 2>&1
+
+        service_prepare
+	dhcpip eth0
+}
+
+service_stop(){
+	killall udhcpc > /dev/null 2>&1
+}
+
+service_restart(){
+	service_stop
+	service_start		
+}
+
+case $1 in
+        start)
+                service_start
+                exit 0 ;;
+        stop)
+                service_stop
+                exit 0 ;;
+        restart)
+                service_restart
+                exit 0 ;;
+        status)
+                service_status
+                exit 0 ;;
+        *)
+                echo "Usage: `basename $0` {start|stop|restart|status}"
+                exit 1 ;;
+esac
