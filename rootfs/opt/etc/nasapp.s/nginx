@@ -1,1 +1,42 @@
-/etc/init.d/nginx
+#!/bin/sh
+
+. /etc/init.d/functions
+
+keypath=/etc
+confile=/etc/nginx/nginx.conf
+service=nginx
+execute="/sbin/nginx"
+exeopts="-p /var/ -c $confile"
+
+service_prepare(){
+	[ ! -d /var/logs ] && mkdir -p /var/logs/
+}
+
+service_start(){
+        [ ! -d /var/empty ] && mkdir -p /var/empty
+
+        service_prepare
+        runprocess "$service" "$execute" "$exeopts"
+}
+
+service_stop(){
+        stoprocess "$service" "$execute" "$exeopts"
+}
+
+case $1 in
+        start)
+                service_start
+                exit 0 ;;
+        stop)
+                service_stop
+                exit 0 ;;
+        restart)
+                service_restart
+                exit 0 ;;
+        status)
+                service_status
+                exit 0 ;;
+        *)
+                echo "Usage: `basename $0` {start|stop|restart|status}"
+                exit 1 ;;
+esac
