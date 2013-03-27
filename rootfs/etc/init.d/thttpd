@@ -2,10 +2,10 @@
 
 . /etc/init.d/functions
 
-confile=/etc/udev/udev.conf
+confile=/etc/thttpd.conf
 service=thttpd
 execute="/sbin/thttpd"
-exeopts="-u admin"
+exeopts="-u admin -C $confile"
 
 service_prepare(){
 	return 0
