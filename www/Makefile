@@ -4,7 +4,7 @@ LIB=-L./
 LDFLAGS=-lcgic
 
 ALL:
-	$(CC) $(INCLUDE) $(LIB) -o index.cgi index.cgi.c $(LDFLAGS)
+	$(CC) $(INCLUDE) $(LIB) -o index.cgi *.c $(LDFLAGS)
 
 
 clean:
