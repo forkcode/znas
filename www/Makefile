@@ -5,7 +5,7 @@ LDFLAGS=-lcgic
 
 ALL:
 	$(CC) $(INCLUDE) $(LIB) -o index.cgi *.c $(LDFLAGS)
-
+	scp index.cgi admin@192.168.1.11:/www
 
 clean:
 	rm -f *.cgi
