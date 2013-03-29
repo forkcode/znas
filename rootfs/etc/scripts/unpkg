@@ -1,0 +1,24 @@
+#!/bin/sh
+
+if [ -z $1 ]; then
+	echo "Usage: `basename $0` ipk_name"
+	exit 1
+fi
+
+ipks=$@
+
+for ipk_name in $ipks
+do
+	if [ ! -f $ipk_name ]; then
+		echo $ipk_name not exists
+		continue
+	fi
+
+	if [ "${ipk_name##*.}" = "ipk" ]; then
+		tar -xOvzf $ipk_name ./data.tar.gz | tar -C / -xzvf -
+	else
+		echo $ipk_name not ipk package
+	fi
+done
+
+exit 0

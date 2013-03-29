@@ -10,7 +10,8 @@ diskops_log(){
 }
 
 diskops_freedisk(){
-	local SWAP_PATH=/mnt/base/swap
+	local SWAP_PATH="/mnt/base/swap"
+	local SWAP_RAID="/dev/md/swapspace"
 
 	service all stop sshd nginx > /dev/null 2>&1
 
@@ -20,10 +21,17 @@ diskops_freedisk(){
 		wait $!
 	fi
 
+	if [ -b $SWAP_RAID ]; then
+		swapoff $SWAP_RAID
+		wait $!
+	fi
+
 	# stop raid
 	for md in /dev/md*
 	do
 		if [ -b $md ]; then
+			echo "check $md is used by system"
+			swapoff $md
 			df | grep $md > /dev/null 2>&1
 			if [ $? -eq 0 ]; then
 				busybox umount $md
@@ -55,23 +63,30 @@ diskops_makepart(){
 	parted -s $FormatDEV mktable gpt >> $PARTEDLOG 2>&1
 	[ $? -ne 0 ] && return 1
 	
-	parted -s $FormatDEV mkpart "primary ext2 0 1024 i" >> $PARTEDLOG 2>&1
+	parted -s $FormatDEV mkpart \
+		"primary ext2    0 1024 i" >> $PARTEDLOG 2>&1
+	[ $? -ne 0 ] && return 1
+
+	parted -s $FormatDEV mkpart \
+		"primary ext2 1024 2048 i" >> $PARTEDLOG 2>&1
 	[ $? -ne 0 ] && return 1
 	
-	parted -s $FormatDEV mkpart "primary ext2 1024 -1 i" >> $PARTEDLOG 2>&1
+	parted -s $FormatDEV mkpart \
+		"primary ext2 2048   -1 i" >> $PARTEDLOG 2>&1
 	[ $? -ne 0 ] && return 1
 	
 	sleep 1
-	mdev -s # fuck with hotplug ...
+	mdev -s # fuck with hotplug ... refresh /dev force ...
 	
 	return 0
 }
 
 diskops_makeuser(){
+	local USERSPACE="/dev/md/userspace"
+	shift 1
 	local USERPARTS=$@
-	local USERSPACE="/dev/md9"
 	local PARTCOUNT=$#
-	local RAIDLABEL="noontec-f4-nas-raid"
+	local RAIDLABEL="userspace"
 	local ERRORFILE="/var/log/makeraid.err"
 	local SYSFORMAT="mke2fs -t ext4"
 
@@ -93,50 +108,100 @@ diskops_makeuser(){
 				return 1
 			fi
 		done
-	else
-		# Create a RAID1 with 4 disks
-		echo Y | mdadm -C $USERSPACE -l1 -c512 \
-			--name=$RAIDLABEL --bitmap=internal \
-			-n $PARTCOUNT --force $USERPARTS >> $ERRORFILE 2>&1
 
-		if [ $? -ne 0 ]; then
-			diskops_log "make $USERSPACE failed with $USERPARTS"
-			return 1
-		fi
+		return 0
+	fi
+	# Create a RAID1 with 4 disks
+	echo Y | mdadm -C $USERSPACE -l1 -c512 \
+		--name=$RAIDLABEL --bitmap=internal \
+		-n $PARTCOUNT --force $USERPARTS >> $ERRORFILE 2>&1
 
-		# Waiting for RAID1 Sync
-		diskops_log "wait for $USERSPACE sync"
-		mdadm --misc -W $USERSPACE
-		
-		# Format RAID1 with ext4 fs
-		diskops_log "Format $USERSPACE with ext4"
-		$SYSFORMAT $USERSPACE
-		
-		if [ $? -ne 0 ]; then
-			diskops_log "Format $USERSPACE failed"
-			return 1
-		fi
+	if [ $? -ne 0 ]; then
+		diskops_log "make $USERSPACE failed with $USERPARTS"
+		return 1
+	fi
+
+	# Waiting for RAID1 Sync
+	diskops_log "wait for $USERSPACE sync"
+	mdadm --misc -W $USERSPACE
+
+	# Format RAID1 with ext4 fs
+	diskops_log "Format $USERSPACE with ext4"
+	$SYSFORMAT $USERSPACE
+
+	if [ $? -ne 0 ]; then
+		diskops_log "Format $USERSPACE failed"
+		return 1
 	fi
 
 	return 0
 }
 
+diskops_makeswap(){
+	local SWAPSPACE="/dev/md/swapspace"
+	shift 1
+	local SWAPLEVEL=1
+	local SWAPPARTS=$@
+        local RAIDLABEL="swapspace"
+        local PARTCOUNT=$#
+	local SYSFORMAT="mkswap"
+        local FORCEFLAG=""
+        local ERRORFILE="/var/log/makeraid.err"
+
+	# only one disk we use --force parameter
+	[ $PARTCOUNT -eq 1 ] && FORCEFLAG="--force"
+
+	diskops_log "create $STORSPACE RAID$STORLEVEL with $STORPARTS"
+
+	if [ -b $SWAPSPACE ]; then
+		mdadm -G $SWAPSPACE -n4 --force
+                for i in $SWAPPARTS
+                do
+                        if [ -b $i ]; then
+                                mdadm --zero-superblock $i
+                                mdadm $SWAPSPACE -a $i >> $ERRORFILE 2>&1
+                                if [ $? -ne 0 ]; then
+                                        diskops_log "$i insert to $SWAPSPACE failed"
+                                        return 1
+                                fi
+                        else
+                                diskops_log "$i is not a block device"
+                                return 1
+                        fi
+                done
+
+		return 0
+	fi
+	
+	echo Y | mdadm -C $SWAPSPACE -l$SWAPLEVEL -c512 \
+                -n $PARTCOUNT --name=$RAIDLABEL \
+                $SWAPPARTS $FORCEFLAG >> $ERRORFILE 2>&1
+
+	if [ $? -ne 0 ]; then
+                diskops_log "make $SWAPSPACE fail with $SWAPPARTS"
+                return 1
+        else
+                diskops_log "make $SWAPSPACE pass with $SWAPPARTS"
+        fi
+
+	diskops_log "Format $STORSPACE with mkswap"
+        $SYSFORMAT $SWAPSPACE
+
+        if [ $? -ne 0 ]; then
+	        diskops_log "Format $USERSPACE failed"
+                return 1
+        fi
+
+	return 0
+}
+
 diskops_makestor(){
-	local STORLEVEL=$1
-	local STORCRYPT=$2
-	shift 2
-	local RAIDLABEL="noontec-f4-nas-raid"
+	local STORLEVEL=$2
+	local STORCRYPT=$3
+	local STORSPACE=$1
+	shift 3
+	local RAIDLABEL="storspace"
 	local PARTCOUNT=$#
-	local STORSPACE="/dev/md"
-
-	for i in `seq 0 32`
-	do
-		if [ ! -b /dev/md$i ]; then
-			STORSPACE=/dev/md$i
-			break
-		fi
-	done
-
 	local STORPARTS=$@
 	local CRYPTPATH=/mnt/base/luks/`basename $STORSPACE`
 	local CRYPTMDEV=/dev/mapper/`basename $STORSPACE`
@@ -195,12 +260,23 @@ diskops_makestor(){
 	return 0
 }
 
+diskops_randommd(){
+	for i in `seq 0 32`
+        do
+                if [ ! -b /dev/md$i ]; then
+			return $i
+                fi
+        done
+}
+
 diskops_inituser(){
 	# Mount RAID1 to /mnt/base
-	local USERSPACE="/dev/md9"
-	local MOUNTPATH="/mnt/base"
+	local USERSPACE=$1
+	local MOUNTPATH="/opt"
         local MOUNTEXEC="mount -t ext4"
-	local SYSTEMPKG="/usr/pkgs/etc.bz2"
+	local SYSTEMPKG="/pkgs/opt.bz2"
+	local ERRORFILE="/var/log/makeraid.err"
+
 
 	diskops_log "Mount $USERSPACE to $MOUNTPATH"
 
@@ -213,20 +289,27 @@ diskops_inituser(){
 
 	diskops_log "Release database to $MOUNTPATH"
 
-	tar -xvf $SYSTEMPKG -C /mnt
-
 	return 0
+}
+
+diskops_initswap(){
+	local SWAPSPACE=$1
+
+	swapon $SWAPSPACE
 }
 
 diskops_initstor(){
 	local STORSPACE=$1
-        local MOUNTPATH="/mnt/base"
+        local MOUNTPATH="/mnt/storspace/`basename $STORSPACE`"
         local MOUNTEXEC="mount -t ext4"
+	local ERRORFILE="/var/log/makeraid.err"
+
+	sleep 1
 
 	[ ! -d $MOUNTPATH ] && mkdir -p $MOUNTPATH
-        $MOUNTEXEC $USERSPACE $MOUNTPATH >> $ERRORFILE 2>&1
+        $MOUNTEXEC $STORSPACE $MOUNTPATH >> $ERRORFILE 2>&1
         if [ $? -ne 0 ]; then
-                diskops_log "Mount $USERSPACE to $MOUNTPATH failed"
+                diskops_log "Mount $STORSPACE to $MOUNTPATH failed"
                 return 1
         fi
 
@@ -243,7 +326,7 @@ diskops_usage(){
         exit 1
 }
 
-diskops_main(){
+diskops_makedisk(){
 	RAID_CRYPT=0 #we must give it a value for makestor
 	
 	while getopts "l:s:e:d:" opt
@@ -267,7 +350,6 @@ diskops_main(){
 
 	RAID_PARTS=$@
 	RAID_COUNT=$#
-	
 	
 	# set some var 
 	for x in $RAID_PARTS
@@ -294,23 +376,48 @@ diskops_main(){
         fi
 	done
 
-	diskops_makeuser $RAID_PARTS_1
+	diskops_randommd
+	local USERRAID="/dev/md"$?
+
+	diskops_makeuser $USERRAID $RAID_PARTS_1
 	if [ $? -ne 0 ]; then
                 diskops_log "makeuser failed"
                 exit 1
         fi
 
-	diskops_inituser
+	diskops_inituser $USERRAID
 	if [ $? -ne 0 ]; then
 		diskops_log "inituser failed"
 		exit 1
 	fi
 
-	diskops_makestor $RAID_LEVEL $RAID_CRYPT $RAID_PARTS_2
+	diskops_randommd
+	local SWAPRAID="/dev/md"$?
+
+	diskops_makeswap $SWAPRAID $RAID_PARTS_2
+        if [ $? -ne 0 ]; then
+                diskops_log "makeswap failed"
+                exit 1
+        fi
+
+	diskops_initswap $SWAPRAID 
+	if [ $? -ne 0 ]; then
+                diskops_log "initswap failed"
+                exit 1
+        fi
+
+	diskops_randommd
+	local STORRAID="/dev/md"$?
+
+	diskops_makestor $STORRAID $RAID_LEVEL $RAID_CRYPT $RAID_PARTS_3
 	if [ $? -ne 0 ]; then
                 diskops_log "makestor failed"
                 exit 1
         fi
-}
 
-diskops_main $@
+	diskops_initstor $STORRAID
+	if [ $? -ne 0 ]; then
+                diskops_log "initstor failed"
+                exit 1
+        fi	
+}
