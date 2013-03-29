@@ -1,5 +1,0 @@
-#/bin/sh
-
-. /etc/scripts/diskops
-
-return diskops_freedisk
