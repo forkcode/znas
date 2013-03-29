@@ -1,0 +1,316 @@
+#!/bin/sh
+
+diskops_log(){
+	local LOGFILE=/var/log/diskops.log
+	local DATE=`date "+%Y-%m-%d %T"`
+
+	[ ! -d /var/log ] && mkdir -p /var/log
+
+	echo $DATE"|"$@ >> $LOGFILE
+}
+
+diskops_freedisk(){
+	local SWAP_PATH=/mnt/base/swap
+
+	service all stop sshd nginx > /dev/null 2>&1
+
+	# stop swap area 
+	if [ -f $SWAP_PATH ]; then
+		swapoff $SWAP_PATH
+		wait $!
+	fi
+
+	# stop raid
+	for md in /dev/md*
+	do
+		if [ -b $md ]; then
+			df | grep $md > /dev/null 2>&1
+			if [ $? -eq 0 ]; then
+				busybox umount $md
+				if [ $? -ne 0 ]; then
+					kill `fuser -m $md`
+					wait $!
+					busybox umount $md
+					[ $? -ne 0 ] && return 1
+				fi
+			fi
+			mdadm -S $md
+			[ $? -ne 0 ] && return 1
+		fi
+	done
+
+	return 0
+}
+
+diskops_makepart(){
+	local PARTEDLOG=/var/log/parted.err
+	local FormatDEV=$1
+	
+	[ -f $PARTEDLOG ] && rm $PARTEDLOG
+
+	if [ ! -b $FormatDEV ]; then
+		return 1
+	fi
+
+	parted -s $FormatDEV mktable gpt >> $PARTEDLOG 2>&1
+	[ $? -ne 0 ] && return 1
+	
+	parted -s $FormatDEV mkpart "primary ext2 0 1024 i" >> $PARTEDLOG 2>&1
+	[ $? -ne 0 ] && return 1
+	
+	parted -s $FormatDEV mkpart "primary ext2 1024 -1 i" >> $PARTEDLOG 2>&1
+	[ $? -ne 0 ] && return 1
+	
+	sleep 1
+	mdev -s # fuck with hotplug ...
+	
+	return 0
+}
+
+diskops_makeuser(){
+	local USERPARTS=$@
+	local USERSPACE="/dev/md9"
+	local PARTCOUNT=$#
+	local RAIDLABEL="noontec-f4-nas-raid"
+	local ERRORFILE="/var/log/makeraid.err"
+	local SYSFORMAT="mke2fs -t ext4"
+
+	[ -f $ERRORFILE ] && rm $ERRORFILE;
+
+	if [ -b $USERSPACE ]; then
+		mdadm -G $USERSPACE -n4 --force
+		for i in $USERPARTS
+		do
+			if [ -b $i ]; then
+#				mdadm --zero-superblock $i
+				mdadm $USERSPACE -a $i >> $ERRORFILE 2>&1
+				if [ $? -ne 0 ]; then
+					diskops_log "$i insert to $USERSPACE failed"
+					return 1
+				fi
+			else
+				diskops_log "$i is not a block device"
+				return 1
+			fi
+		done
+	else
+		# Create a RAID1 with 4 disks
+		echo Y | mdadm -C $USERSPACE -l1 -c512 \
+			--name=$RAIDLABEL --bitmap=internal \
+			-n $PARTCOUNT --force $USERPARTS >> $ERRORFILE 2>&1
+
+		if [ $? -ne 0 ]; then
+			diskops_log "make $USERSPACE failed with $USERPARTS"
+			return 1
+		fi
+
+		# Waiting for RAID1 Sync
+		diskops_log "wait for $USERSPACE sync"
+		mdadm --misc -W $USERSPACE
+		
+		# Format RAID1 with ext4 fs
+		diskops_log "Format $USERSPACE with ext4"
+		$SYSFORMAT $USERSPACE
+		
+		if [ $? -ne 0 ]; then
+			diskops_log "Format $USERSPACE failed"
+			return 1
+		fi
+	fi
+
+	return 0
+}
+
+diskops_makestor(){
+	local STORLEVEL=$1
+	local STORCRYPT=$2
+	shift 2
+	local RAIDLABEL="noontec-f4-nas-raid"
+	local PARTCOUNT=$#
+	local STORSPACE="/dev/md"
+
+	for i in `seq 0 32`
+	do
+		if [ ! -b /dev/md$i ]; then
+			STORSPACE=/dev/md$i
+			break
+		fi
+	done
+
+	local STORPARTS=$@
+	local CRYPTPATH=/mnt/base/luks/`basename $STORSPACE`
+	local CRYPTMDEV=/dev/mapper/`basename $STORSPACE`
+	local CRYPTMD5C=""
+	local SYSFORMAT="mke2fs -t ext4"
+	local FORCEFLAG=""
+	local ERRORFILE="/var/log/makeraid.err"
+
+	# only one disk we use --force parameter
+	[ $PARTCOUNT -eq 1 ] && FORCEFLAG="--force"
+
+	diskops_log "create $STORSPACE RAID$STORLEVEL with $STORPARTS"
+
+	echo Y | mdadm -C $STORSPACE -l$STORLEVEL -c512 \
+		-n $PARTCOUNT --name=$RAIDLABEL \
+		$STORPARTS $FORCEFLAG >> $ERRORFILE 2>&1
+	
+	if [ $? -ne 0 ]; then
+		diskops_log "make $STORSPACE fail with $STORPARTS"
+		return 1
+	else
+		diskops_log "make $STORSPACE pass with $STORPARTS"
+	fi
+
+	if [ $STORCRYPT -ne 0 ]; then
+		[ ! -d $CRYPTPATH ] && make -p $CRYPTPATH
+
+		diskops_log "encrypt $STORSPACE with passwd"
+
+		echo -e $STORCRYPT"\n"$STORCRYPT | cryptsetup luksFormat \
+		$STORSPACE -c aes-cbc-plain -s 32 -h ripemd160
+
+		CRYPTMD5C=`echo $STORCRYPT | md5sum | awk '{print $1}'`
+		echo $CRYPTMD5C > $CRYPTPATH
+
+		echo -e $STORCRYPT"\n"$STORCRYPT | cryptsetup luksOpen |
+		$STORSPACE `basename $STORSPACE`
+
+		diskops_log "Format $STORSPACE with ext4"
+		$SYSFORMAT $CRYPTMDEV
+
+		if [ $? -ne 0 ]; then
+	                diskops_log "Format $STORSPACE failed"
+	                return 1
+                fi
+	else
+		diskops_log "Format $STORSPACE with ext4"
+		$SYSFORMAT $STORSPACE
+
+		if [ $? -ne 0 ]; then
+                        diskops_log "Format $USERSPACE failed"
+                        return 1
+                fi
+	fi
+
+	return 0
+}
+
+diskops_inituser(){
+	# Mount RAID1 to /mnt/base
+	local USERSPACE="/dev/md9"
+	local MOUNTPATH="/mnt/base"
+        local MOUNTEXEC="mount -t ext4"
+	local SYSTEMPKG="/usr/pkgs/etc.bz2"
+
+	diskops_log "Mount $USERSPACE to $MOUNTPATH"
+
+	[ ! -d $MOUNTPATH ] && mkdir -p $MOUNTPATH
+	$MOUNTEXEC $USERSPACE $MOUNTPATH >> $ERRORFILE 2>&1
+	if [ $? -ne 0 ]; then
+        	diskops_log "Mount $USERSPACE to $MOUNTPATH failed"
+	        return 1
+	fi
+
+	diskops_log "Release database to $MOUNTPATH"
+
+	tar -xvf $SYSTEMPKG -C /mnt
+
+	return 0
+}
+
+diskops_initstor(){
+	local STORSPACE=$1
+        local MOUNTPATH="/mnt/base"
+        local MOUNTEXEC="mount -t ext4"
+
+	[ ! -d $MOUNTPATH ] && mkdir -p $MOUNTPATH
+        $MOUNTEXEC $USERSPACE $MOUNTPATH >> $ERRORFILE 2>&1
+        if [ $? -ne 0 ]; then
+                diskops_log "Mount $USERSPACE to $MOUNTPATH failed"
+                return 1
+        fi
+
+	return 0
+}
+
+diskops_usage(){
+        echo "Usage "`basename $0`":"
+        echo "       -l: level for raid: 0 1 4 5 6 10 linear"
+        echo "       -s: hot spare device"
+        echo "       -e: raid encrypt password"
+        echo "       -d: device list"
+        echo "       Remark: -d must at end of arguments"
+        exit 1
+}
+
+diskops_main(){
+	RAID_CRYPT=0 #we must give it a value for makestor
+	
+	while getopts "l:s:e:d:" opt
+	do
+	case $opt in
+                l) RAID_LEVEL=$OPTARG 
+                   shift 1;;
+                s) RAID_SPARE=$OPTARG 
+                   shift 1;;
+                e) RAID_CRYPT=$OPTARG 
+                   shift 1;;
+                d) RAID_PARTS=$OPTARG 
+                   shift 1;;
+                ?) diskops_usage ;;
+        esac
+        done
+        
+	local RAID_PARTS_1=""
+	local RAID_PARTS_2=""
+	local RAID_PARTS_3=""
+
+	RAID_PARTS=$@
+	RAID_COUNT=$#
+	
+	
+	# set some var 
+	for x in $RAID_PARTS
+	do
+		RAID_PARTS_1="${RAID_PARTS_1}${x}1 "
+		RAID_PARTS_2="${RAID_PARTS_2}${x}2 "
+		RAID_PARTS_3="${RAID_PARTS_3}${x}3 "
+	done
+
+	[ $# -eq 0 ] && diskops_usage
+
+	diskops_freedisk 
+	if [ $? -ne 0 ]; then
+		diskops_log "freedisk failed"
+		exit 1
+	fi
+
+	for x in $RAID_PARTS
+	do
+	diskops_makepart $x
+	if [ $? -ne 0 ]; then
+                diskops_log "makepart failed"
+                exit 1
+        fi
+	done
+
+	diskops_makeuser $RAID_PARTS_1
+	if [ $? -ne 0 ]; then
+                diskops_log "makeuser failed"
+                exit 1
+        fi
+
+	diskops_inituser
+	if [ $? -ne 0 ]; then
+		diskops_log "inituser failed"
+		exit 1
+	fi
+
+	diskops_makestor $RAID_LEVEL $RAID_CRYPT $RAID_PARTS_2
+	if [ $? -ne 0 ]; then
+                diskops_log "makestor failed"
+                exit 1
+        fi
+}
+
+diskops_main $@
