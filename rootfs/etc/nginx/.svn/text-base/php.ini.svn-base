@@ -1,7 +1,0 @@
-file_uploads=on
-upload_tmp_dir="/mnt/base/tmp"
-upload_max_filesize=4200m
-post_max_size=4100m
-max_execution_time=600
-max_input_time=600
-memory_limit=10m

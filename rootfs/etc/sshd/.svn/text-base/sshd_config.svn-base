@@ -1,4 +1,0 @@
-UsePrivilegeSeparation no
-HostKey /etc/sshd/ssh_host_rsa_key
-HostKey /etc/sshd/ssh_host_dsa_key
-HostKey /etc/sshd/ssh_host_ecdsa_key
