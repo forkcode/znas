@@ -10,10 +10,9 @@ diskops_log(){
 }
 
 diskops_freedisk(){
+	local STOP_PART=$@
 	local SWAP_PATH="/mnt/base/swap"
 	local SWAP_RAID="/dev/md/swapspace"
-
-	service all stop sshd nginx > /dev/null 2>&1
 
 	# stop swap area 
 	if [ -f $SWAP_PATH ]; then
@@ -25,6 +24,8 @@ diskops_freedisk(){
 		swapoff $SWAP_RAID
 		wait $!
 	fi
+
+	[ -d /dev/md ] && rm /dev/md/* -fr
 
 	# stop raid
 	for md in /dev/md*
@@ -271,12 +272,11 @@ diskops_randommd(){
 
 diskops_inituser(){
 	# Mount RAID1 to /mnt/base
-	local USERSPACE=$1
+	local USERSPACE="/dev/md/userspace"
 	local MOUNTPATH="/opt"
         local MOUNTEXEC="mount -t ext4"
 	local SYSTEMPKG="/pkgs/opt.bz2"
 	local ERRORFILE="/var/log/makeraid.err"
-
 
 	diskops_log "Mount $USERSPACE to $MOUNTPATH"
 
@@ -293,7 +293,7 @@ diskops_inituser(){
 }
 
 diskops_initswap(){
-	local SWAPSPACE=$1
+	local SWAPSPACE="/dev/md/swapspace"
 
 	swapon $SWAPSPACE
 }
@@ -361,7 +361,7 @@ diskops_makedisk(){
 
 	[ $# -eq 0 ] && diskops_usage
 
-	diskops_freedisk 
+	diskops_freedisk $RAID_PARTS
 	if [ $? -ne 0 ]; then
 		diskops_log "freedisk failed"
 		exit 1
@@ -421,3 +421,19 @@ diskops_makedisk(){
                 exit 1
         fi	
 }
+
+##########################################
+#  this is a gorgeous line for division  #
+##########################################
+
+diskops_main(){
+	local CALLFUNC=`basename $0`
+
+	case $CALLFUNC in
+		makebase) diskops_makedisk $@ ;;
+		freebase) diskops_freedisk $@ ;;
+		*) echo "unsupport command: $CALLFUNC" ;;
+	esac
+}
+
+diskops_main $@
