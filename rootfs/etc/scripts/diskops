@@ -6,11 +6,9 @@ diskops_log(){
 
 	[ ! -d /var/log ] && mkdir -p /var/log
 
-	echo "[$DATE][$@]"
 	echo $DATE"|"$@ >> $LOGFILE
 }
 
-<<<<<<< HEAD
 diskops_freedisk(){
 	local SWAP_PATH="/mnt/base/swap"
 	local SWAP_RAID="/dev/md/swapspace"
@@ -22,134 +20,36 @@ diskops_freedisk(){
 		swapoff $SWAP_PATH
 		wait $!
 	fi
-=======
-# remove raid from system
-diskops_freebase(){
-	local RAIDPARTS=$@
-	local USERMPATH="/opt"
-	local STORMPATH="/mnt/storspace"
-        local USERSPACE="/dev/md/userspace"
-        local SWAPSPACE="/dev/md/swapspace"
 
-	[ -b $SWAPSAPCE ] && swapoff $SWAPSPACE
-
-	# here is for new system
-	mount | grep $USERSPACE >> /dev/null 2>&1
-	if [ $? -eq 0 ]; then
-		fuser -k $USERMPATH
-		busybox umount $USERMPATH
-		if [ $? -ne 0 ]; then
-                        diskops_log "umount $USERMPATH failed"
-                        return 1
-                fi
->>>>>>> dff4d696e2fd1f8ae8cc18e882bb6c77dea490cf
-
-		mdadm -S $USERSPACE
-		if [ $? -ne 0 ]; then
-                        diskops_log "stop $USERSPACE failed"
-                        return 1
-                fi
+	if [ -b $SWAP_RAID ]; then
+		swapoff $SWAP_RAID
+		wait $!
 	fi
 
-	for x in /dev/md*
-        do
-                # check $x if mounted
-		[ ! -b $x ] && continue
-                mount | grep $x
-                if [ $? -eq 0 ]; then
-                        fuser -k $STORMPATH/`basename $x`
-                        busybox umount $x
-                        if [ $? -ne 0 ]; then
-                                diskops_log "umount $x failed"
-                                return 1
-                        fi
+	[ -d /dev/md ] && rm /dev/md/* -fr
 
-			mdadm -S $x
-			if [ $? -ne 0 ]; then
-                        	diskops_log "stop $x failed"
-	                        return 1
-                	fi
-                fi
-        done
-
-	return 0
-}
-
-# free device from using ....
-diskops_freeused(){
-	local RAIDPARTS=$@
-
-	for x in $RAIDPARTS
+	# stop raid
+	for md in /dev/md*
 	do
-		if [ ! -b $x ]; then
-			echo "$x is not a block device"
-			continue
-		fi
-
-		local MOUNTPATH=`mount | grep "$x" | awk {'print $3'}`
-		# kill process which use this mount area
-		if [ $MOUNTPATH"NULL" != "NULL" ]; then
-			fuser -k $MOUNTPATH
-			umount $MOUNTPATH
-			if [ $? -ne 0 ]; then
-				echo "umount $x failed"
-				return 1
-			fi
-		else
-			echo "$x not mount"
-		fi
-		# check if device used by a raid array
-		for b in /dev/md*
-		do
-			# skip if not block device
-			if [ ! -b $b ]; then
-				continue
-			fi
-
-			local USEDPART=`mdadm --misc -D $b | grep $x | awk {'print $7'}`
-			
-			if [ $USEDPART"NULL" != "NULL" ]; then
-				if [ ! -b $USEDPART ]; then
-					echo "$USEDPART not a block device"
-					continue
-				fi
-
-				mdadm -f $b $USEDPART
-				mdadm -r $b $USEDPART
-
+		if [ -b $md ]; then
+			echo "check $md is used by system"
+			swapoff $md
+			df | grep $md > /dev/null 2>&1
+			if [ $? -eq 0 ]; then
+				busybox umount $md
 				if [ $? -ne 0 ]; then
-					echo "remove $USEDPART from $b failed"
-					return 1
+					kill `fuser -m $md`
+					wait $!
+					busybox umount $md
+					[ $? -ne 0 ] && return 1
 				fi
 			fi
-		done
+			mdadm -S $md
+			[ $? -ne 0 ] && return 1
+		fi
 	done
 
 	return 0
-}
-
-diskops_freedisk(){
-	local RAIDPARTS=$@
-	local PARTCOUNT=$#
-	local SELECTALL=1
-
-	# we call diskops_freebase when all disk selected
-	for x in /dev/sd[a-z]
-	do
-		[ ! -b $x ] && continue
-		echo $RAIDPARTS | grep $x > /dev/null 2>&1
-		[ $? -eq 1 ] && SELECTALL=0
-	done
-
-	echo "SELECTALL:$SELECTALL"
-
-	if [ $SELECTALL -eq 1 ]; then
-		diskops_freebase
-		return $?
-	fi
-	
-	diskops_freeused $RAIDPARTS
-	return $? 
 }
 
 diskops_makepart(){
@@ -174,7 +74,7 @@ diskops_makepart(){
 	[ $? -ne 0 ] && return 1
 	
 	parted -s $FormatDEV mkpart \
-		"primary ext2 2048 4096 i" >> $PARTEDLOG 2>&1
+		"primary ext2 2048   -1 i" >> $PARTEDLOG 2>&1
 	[ $? -ne 0 ] && return 1
 	
 	sleep 1
@@ -379,9 +279,6 @@ diskops_inituser(){
 	local SYSTEMPKG="/pkgs/opt.bz2"
 	local ERRORFILE="/var/log/makeraid.err"
 
-	mount | grep $USERSPACE
-	[ $? -eq 0 ] && return 0
-
 	diskops_log "Mount $USERSPACE to $MOUNTPATH"
 
 	[ ! -d $MOUNTPATH ] && mkdir -p $MOUNTPATH
@@ -399,13 +296,7 @@ diskops_inituser(){
 diskops_initswap(){
 	local SWAPSPACE="/dev/md/*swapspace"
 
-	if [ -b $SWAPSPACE ]; then
-		swapon $SWAPSPACE
-	else
-		return 1
-	fi
-
-	return 0
+	swapon $SWAPSPACE
 }
 
 diskops_initstor(){
