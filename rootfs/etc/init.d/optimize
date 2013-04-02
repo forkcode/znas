@@ -4,8 +4,8 @@
 
 echo 1     > /proc/sys/vm/dirty_ratio
 echo 1     > /proc/sys/vm/dirty_background_ratio
-echo 65536 > /proc/sys/vm/dirty_background_bytes
 echo 100   > /proc/sys/vm/dirty_writeback_centisecs
+echo 65536 > /proc/sys/vm/dirty_background_bytes
 echo 100   > /proc/sys/vm/dirty_expire_centisecs
 echo 130   > /proc/sys/vm/vfs_cache_pressure
 echo 512   > /proc/sys/vm/min_free_kbytes
@@ -18,7 +18,16 @@ echo 512   > /proc/sys/vm/min_free_kbytes
 
 for path in /sys/block/sd*
 do
+	local SETFILE=$path/queue/read_ahead_kb
 	if [ -d $path ]; then
-		echo 4096 > $path/queue/read_ahead_kb
+		echo 4096 > $SETFILE
+	fi
+done
+
+for path in /sys/block/md*
+do
+	local SETFILE=$path/queue/read_ahead_kb
+	if [ -f $SETFILE ]; then
+		echo 4096 > $SETFILE
 	fi
 done

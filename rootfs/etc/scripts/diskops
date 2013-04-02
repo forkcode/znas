@@ -10,9 +10,10 @@ diskops_log(){
 }
 
 diskops_freedisk(){
-	local STOP_PART=$@
 	local SWAP_PATH="/mnt/base/swap"
 	local SWAP_RAID="/dev/md/swapspace"
+
+	service all stop sshd nginx > /dev/null 2>&1
 
 	# stop swap area 
 	if [ -f $SWAP_PATH ]; then
@@ -272,7 +273,7 @@ diskops_randommd(){
 
 diskops_inituser(){
 	# Mount RAID1 to /mnt/base
-	local USERSPACE="/dev/md/userspace"
+	local USERSPACE="/dev/md/*userspace"
 	local MOUNTPATH="/opt"
         local MOUNTEXEC="mount -t ext4"
 	local SYSTEMPKG="/pkgs/opt.bz2"
@@ -293,7 +294,7 @@ diskops_inituser(){
 }
 
 diskops_initswap(){
-	local SWAPSPACE="/dev/md/swapspace"
+	local SWAPSPACE="/dev/md/*swapspace"
 
 	swapon $SWAPSPACE
 }
@@ -315,6 +316,8 @@ diskops_initstor(){
 
 	return 0
 }
+
+
 
 diskops_usage(){
         echo "Usage "`basename $0`":"
@@ -361,7 +364,7 @@ diskops_makedisk(){
 
 	[ $# -eq 0 ] && diskops_usage
 
-	diskops_freedisk $RAID_PARTS
+	diskops_freedisk 
 	if [ $? -ne 0 ]; then
 		diskops_log "freedisk failed"
 		exit 1
@@ -422,6 +425,33 @@ diskops_makedisk(){
         fi	
 }
 
+diskops_initznas(){
+	diskops_inituser
+	if [ $? -ne 0 ]; then
+		diskops_log "inituser failed"
+		exit 1
+	fi
+
+	diskops_initswap
+	if [ $? -ne 0 ]; then
+		diskops_log "makeswap failed"
+		exit 1
+	fi
+
+	for i in /dev/md/*storspace*
+	do
+		if [ -b $i ]; then
+			local REALPATH=`readlink $i`
+			diskops_initstor $REALPATH
+			if [ $? -ne 0 ]; then
+				diskops_log "initstor $REALPATH failed"
+			fi
+		fi
+	done
+
+	return 0
+}
+
 ##########################################
 #  this is a gorgeous line for division  #
 ##########################################
@@ -432,6 +462,7 @@ diskops_main(){
 	case $CALLFUNC in
 		makebase) diskops_makedisk $@ ;;
 		freebase) diskops_freedisk $@ ;;
+		initznas) diskops_initznas $@ ;;
 		*) echo "unsupport command: $CALLFUNC" ;;
 	esac
 }
