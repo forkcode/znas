@@ -6,7 +6,7 @@
 #build /dev
 mount | grep /dev > /dev/null 2>&1
 if [ $? -ne 0 ]; then
-	mount -o size=8M -t tmpfs udev /dev
+	mount -t devtmpfs udev /dev
 	mkdir /dev/pts
 	mkdir /dev/shm
 fi
@@ -19,8 +19,11 @@ fi
 #build proc sys var tmp ...
 mount -a
 
+#set default hostname
+hostname znas
+
 #make some basic nodes
-makenode
+#makenode
 
 #link user file
 makeuser
