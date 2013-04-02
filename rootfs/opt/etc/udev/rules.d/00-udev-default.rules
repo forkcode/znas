@@ -1,6 +1,0 @@
-
-# usb storage link
-KERNEL=="sd[a-z]*", DRIVERS=="usb-storage", SYMLINK+="usb-storage/%k"
-
-# hdd storage link by slot
-KERNEL=="sd[a-z]", DRIVERS=="sd", SYMLINK+="hdd-slot/%b"
