@@ -2,10 +2,10 @@
 
 . /etc/init.d/functions
 
-keypath=/etc/sshd
-confile=/etc/sshd/sshd_config
+keypath=/opt/etc/sshd
+confile=/opt/etc/sshd/sshd_config
 service=sshd
-execute="/sbin/sshd"
+execute="sshd"
 exeopts="-f $confile"
 
 service_prepare(){
