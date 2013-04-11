@@ -20,4 +20,6 @@ struct requestProto{
 	int condition;
 };
 
+char * fileout(char * filepath);
+
 #endif

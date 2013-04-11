@@ -1,9 +1,10 @@
 #include <common.h>
 
-#define max_reqlist_len 6 
+#define max_reqlist_len 7
 
 static 
 struct requestProto reqlist[max_reqlist_len] = {
+{"help",NULL,NULL,1},
 {"disk",NULL,NULL,1},
 {"user",NULL,NULL,1},
 {"network",netget,netset,1},
