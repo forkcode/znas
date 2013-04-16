@@ -2,24 +2,93 @@
 
 . /etc/init.d/functions
 
-mdada -As >> /var/log/migrate.log
+local OP_DIR="/tmp/migrate"
+local MD_DIR=""
+local ERROUT="/var/log/migrate.err"
+local LOGOUT="/var/log/migrate.log"
+local MD_BASE="/dev/md9"
+local MNTPATH="/opt/"
 
-if [ $? -ne 0 ]; then
-	setlog `basename $0` "can't active raid device" 1
-	exit 1
-fi
+restorebase(){
+	local FORCE_FLAG="--force"
+	local MDADM_FLAG="-A"
+	local EXT_FLAG="--name=userspace --update=name"
 
-if [ -b "/dev/md9" ]; then
-	mdadm --assemble /dev/md9 \
-		--name="userspace" --update=name \
-		/dev/sd[a-z]1
-fi
+	[ ! -d $OP_DIR ] && mkdir -p $OP_DIR
 
-for id in `seq 0 9`
-do
-	if [ -b "/dev/md"$id ]
-		mdadm --assemble $storspace \
-			--name="storspace"$id --update=name \
-			/dev/sd[a-z]2
+	for blk in /dev/sd[a-z]1
+	do
+		[ ! -b $blk ] && continue
+		
+		local RAID_MAGIC=`mdadm -E $blk | grep "Name :" | grep "noontec-f4-nas-raid"`
+
+		if [ $? -eq 0 ]; then
+			touch $OP_DIR/`basename $blk`
+		fi
+	done
+
+	for blk in $OP_DIR/*
+	do
+		MD_DIR="${MD_DIR} /dev/`basename ${blk}`"
+	done
+
+	mdadm -A $MD_BASE $MD_DIR $EXT_FLAG > $ERROUT 2>&1
+
+	if [ $? -ne 0 ]; then
+		echo "mdadm -A $MD_BASE $MD_DIR failed" >> $LOGOUT
+		echo "use mdadm -a instead" >> $LOGOUT
+
+		for blk in $OP_DIR/*
+		do
+			mdadm $MDADM_FLAG $MD_BASE /dev/`basename $blk` $EXT_FLAG $FORCE_FLAG >> $ERROUT 2>&1
+			if [ $? -ne 0 ]; then
+				echo "mdadm -a $MD_BASE /dev/`basename $blk` $FORCE_FLAG failed"
+			else
+				FORCE_FLAG=""
+				MDADM_FLAG="-a"
+				EXT_FLAG=""
+			fi
+		done
+
+		mdadm --misc -W
 	fi
-done
+}
+
+restorestor(){
+	local MDADM_FLAG="-A"
+	local EXT_FLAG="--name=storspace --update=name"
+
+	if [ -d $OP_DIR ]; then
+		rm -fr $OP_DIR/*
+	else
+		mkdir -p $OP_DIR
+	fi
+
+	for blk in /dev/sd[a-z]2
+	do
+		[ ! -b $blk ] && continue
+
+		local MAGIC=`mdadm -E $blk | grep Magic | awk {'print $3'}`
+		
+		[ ! -d $OP_DIR/$MAGIC ] && mkdir -p $OP_DIR/$MAGIC
+
+		touch $OP_DIR/$MAGIC/`basename $blk`
+	done
+
+
+	for dir in $OP_DIR/*
+	do
+		local RAIDDISKS=""
+		for blk in $dir/*
+		do
+			RAIDDISKS=$RAIDDISKS" "/dev/`basename $blk`
+		done
+		echo "mdadm -A /dev/md64 ${RAIDDISKS}" >> $LOGOUT
+		mdadm -A /dev/md64 $RAIDDISKS $EXT_FLAG
+		mdadm -S /dev/md64
+		sleep 1
+	done		
+}
+
+restorebase
+restorestor
