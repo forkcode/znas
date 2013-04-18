@@ -2,8 +2,8 @@
 
 . /etc/init.d/functions
 
-keypath=/opt/etc/sshd
-confile=/opt/etc/sshd/sshd_config
+keypath=/opt/etc/openssh
+confile=/opt/etc/openssh/sshd_config
 service=sshd
 execute="sshd"
 exeopts="-f $confile"
