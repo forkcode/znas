@@ -1,0 +1,95 @@
+#!/bin/sh
+
+. /etc/init.d/functions
+
+license=""
+service=mysql
+apppath="/usr/app/mysql/"
+execute="$apppath/libexec/mysqld"
+exeport=`cat $MOUNT_PATH/etc/mysqlport`
+exeopts="-u root --datadir=/mnt/database --master-port=$exeport"
+trueexe=""
+stopexe="$execute -s"
+
+service_status(){
+	ps ax | grep $execute | grep -v grep > /dev/null 2>&1
+	if [ $? -eq 0 ]; then
+		echo $service "running"
+		exit 1
+	else
+		echo $service "stopped"
+	fi
+}
+
+service_prepare(){
+	local mountpath=""
+        local currtpath=`pwd`
+
+	service_status 
+
+        # mkdir for download
+        if [ ! -L /mnt/database ]; then
+                for blk in /dev/md*
+                do
+                        if [ -b $blk ]; then
+                                mountpath=/mnt/`basename $blk`
+                                if [ -d $mountpath/database ]; then
+                                        cd /mnt/
+                                        ln -s `basename $blk`/download .
+                                        cd $currtpath
+                                        break
+                                fi
+                        fi
+                done
+
+		if [ $mountpath"null" = "null" ]; then
+          		setlog $service "can't found database dir on system,use default"
+			if [ ! -d /mnt/base/database ]; then
+				mkdir -p /mnt/base/database/
+				ln -s /mnt/base/database /mnt/database
+				$apppath/bin/mysql_install_db --datadir=/mnt/database  --user=mysql --force > /dev/null
+			fi
+        	fi	
+        fi
+
+	# check port
+	`netstat -an | grep ":$exeport"`
+	if [ $? -eq 0 ]; then
+		setlog $service "$service port $exeport has been used"
+		exit 1
+	fi
+}
+
+service_start(){
+        [ ! -d /var/run ] && mkdir -p /var/run
+
+	runproc $execute $exeopts
+#	$execute $exeopts $license & # run it to background
+}
+
+service_stop(){
+	stoproc $execute $exeopts
+}
+
+service_restart(){
+	service_stop
+	service_start
+}
+
+case $1 in
+        start)
+                service_start
+                exit 0 ;;
+        stop)
+                service_stop
+                exit 0 ;;
+        restart)
+                service_restart
+                exit 0 ;;
+        status)
+                service_status
+                exit 0 ;;
+        *)
+                echo "Usage: `basename $0` {start|stop|restart|status}"
+                exit 1 ;;
+esac

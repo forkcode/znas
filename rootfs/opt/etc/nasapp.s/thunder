@@ -1,0 +1,107 @@
+#!/bin/sh
+
+. /etc/init.d/functions
+
+license=""
+service=thunder
+execute="/usr/local/etc/thunder/portal"
+exeopts="-l"
+trueexe="EmbedThunderManager"
+stopexe="$execute -s"
+
+service_status(){
+	ps ax | grep $trueexe | grep -v grep > /dev/null 2>&1
+	if [ $? -eq 0 ]; then
+		echo $service "running"
+		exit 1
+	else
+		echo $service "stopped"
+	fi
+}
+
+service_prepare(){
+	local mountpath=""
+        local currtpath=`pwd`
+
+	service_status
+        # mkdir for download
+        if [ ! -L /mnt/download ]; then
+                for blk in /dev/md*
+                do
+                        if [ -b $blk ]; then
+                                mountpath=/mnt/`basename $blk`
+                                if [ -d $mountpath/download ]; then
+                                        cd /mnt/
+                                        ln -s `basename $blk`/download .
+                                        cd $currtpath
+                                        break
+                                fi
+                        fi
+                done
+
+		if [ $mountpath"null" = "null" ]; then
+          		setlog thunder "can't found download dir on system"
+                	exit 1
+        	fi	
+        fi
+
+	# check port
+	`netstat -an | grep ":9000"`
+	if [ $? -eq 0 ]; then
+		setlog thunder "rpc port 9000 has been used"
+		exit 1
+	fi
+
+	# cache license
+	if [ ! -f /tmp/license ]; then
+		if [ -b /dev/mtdblock1 ]; then
+			dd if=/dev/mtdblock1 of=/tmp/license bs=1 count=43
+		else
+			setlog thunder "flash data area not exists"
+			exit 1
+		fi
+	fi
+
+	# thunder only run at /etc
+	if [ ! -d /etc/thunder ]; then
+		cp -a /usr/app/thunder /etc
+	else
+		rm -f /usr/local/etc/thunder/thunder/*.cfg
+	fi
+
+	license=`cat /tmp/license`
+}
+
+service_start(){
+        [ ! -d /var/run ] && mkdir -p /var/run
+
+        service_prepare
+	$execute $exeopts $license & # run it to background
+}
+
+service_stop(){
+	$stopexe
+}
+
+service_restart(){
+	service_stop
+	service_start
+}
+
+case $1 in
+        start)
+                service_start
+                exit 0 ;;
+        stop)
+                service_stop
+                exit 0 ;;
+        restart)
+                service_restart
+                exit 0 ;;
+        status)
+                service_status
+                exit 0 ;;
+        *)
+                echo "Usage: `basename $0` {start|stop|restart|status}"
+                exit 1 ;;
+esac
