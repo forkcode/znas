@@ -54,26 +54,26 @@ diskops_freedisk(){
 
 diskops_makepart(){
 	local PARTEDLOG=/var/log/parted.err
-	local FormatDEV=$1
+	local FMTDEV=$1
 	
 	[ -f $PARTEDLOG ] && rm $PARTEDLOG
 
-	if [ ! -b $FormatDEV ]; then
+	if [ ! -b $FMTDEV ]; then
 		return 1
 	fi
 
-	parted -s $FormatDEV mktable gpt >> $PARTEDLOG 2>&1
+	parted -s $FMTDEV mktable gpt >> $PARTEDLOG 2>&1
 	[ $? -ne 0 ] && return 1
 	
-	parted -s $FormatDEV mkpart \
+	parted -s $FMTDEV mkpart \
 		"primary ext2    0 1024 i" >> $PARTEDLOG 2>&1
 	[ $? -ne 0 ] && return 1
 
-	parted -s $FormatDEV mkpart \
+	parted -s $FMTDEV mkpart \
 		"primary ext2 1024 2048 i" >> $PARTEDLOG 2>&1
 	[ $? -ne 0 ] && return 1
 	
-	parted -s $FormatDEV mkpart \
+	parted -s $FMTDEV mkpart \
 		"primary ext2 2048   -1 i" >> $PARTEDLOG 2>&1
 	[ $? -ne 0 ] && return 1
 	
@@ -90,7 +90,7 @@ diskops_makeuser(){
 	local PARTCOUNT=$#
 	local RAIDLABEL="userspace"
 	local ERRORFILE="/var/log/makeraid.err"
-	local SYSFORMAT="mke2fs -t ext4"
+	local SYSFORMAT="mke2fs -t ext4 -q -m10 -b 4096"
 
 	[ -f $ERRORFILE ] && rm $ERRORFILE;
 
@@ -153,7 +153,7 @@ diskops_makeswap(){
 	# only one disk we use --force parameter
 	[ $PARTCOUNT -eq 1 ] && FORCEFLAG="--force"
 
-	diskops_log "create $STORSPACE RAID$STORLEVEL with $STORPARTS"
+	diskops_log "create $SWAPSPACE RAID$SWAPLEVEL with $SWAPPARTS"
 
 	if [ -b $SWAPSPACE ]; then
 		mdadm -G $SWAPSPACE -n4 --force
@@ -208,7 +208,7 @@ diskops_makestor(){
 	local CRYPTPATH=/mnt/base/luks/`basename $STORSPACE`
 	local CRYPTMDEV=/dev/mapper/`basename $STORSPACE`
 	local CRYPTMD5C=""
-	local SYSFORMAT="mke2fs -t ext4"
+	local SYSFORMAT="mke2fs -t ext4 -q -m10 -b 4096"
 	local FORCEFLAG=""
 	local ERRORFILE="/var/log/makeraid.err"
 
@@ -227,6 +227,9 @@ diskops_makestor(){
 	else
 		diskops_log "make $STORSPACE pass with $STORPARTS"
 	fi
+
+	# speed up raid sync
+	echo 100000 > /sys/block/$STORSPACE/md/sync_speed_min
 
 	if [ $STORCRYPT -ne 0 ]; then
 		[ ! -d $CRYPTPATH ] && make -p $CRYPTPATH
@@ -316,8 +319,6 @@ diskops_initstor(){
 
 	return 0
 }
-
-
 
 diskops_usage(){
         echo "Usage "`basename $0`":"

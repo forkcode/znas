@@ -4,7 +4,7 @@
 
 license=""
 service=mysql
-apppath="/usr/app/mysql/"
+apppath="/usr/app/mysql"
 execute="$apppath/libexec/mysqld"
 exeport=`cat $MOUNT_PATH/etc/mysqlport`
 exeopts="-u root --datadir=/mnt/database --master-port=$exeport"
@@ -27,7 +27,7 @@ service_prepare(){
 
 	service_status 
 
-        # mkdir for download
+        # mkdir for database
         if [ ! -L /mnt/database ]; then
                 for blk in /dev/md*
                 do
@@ -42,7 +42,7 @@ service_prepare(){
                         fi
                 done
 
-		if [ $mountpath"null" = "null" ]; then
+		if [ ! -L /mnt/database ]; then
           		setlog $service "can't found database dir on system,use default"
 			if [ ! -d /mnt/base/database ]; then
 				mkdir -p /mnt/base/database/
@@ -63,12 +63,13 @@ service_prepare(){
 service_start(){
         [ ! -d /var/run ] && mkdir -p /var/run
 
-	runproc $execute $exeopts
+	service_prepare
+	runprocess $service $execute $exeopts
 #	$execute $exeopts $license & # run it to background
 }
 
 service_stop(){
-	stoproc $execute $exeopts
+	stoprocess $service $execute $exeopts
 }
 
 service_restart(){
